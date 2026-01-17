@@ -1,0 +1,14 @@
+# Virtual environments
+venv/
+venvl/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+logs/
+
+# Large datasets (NEVER track in git)
+data/raw/
+data/versions/

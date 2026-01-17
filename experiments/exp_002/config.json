@@ -1,0 +1,8 @@
+{
+  "experiment_id": "exp_002",
+  "dataset_version": "v1",
+  "model_type": "logistic_regression",
+  "class_weight": "balanced",
+  "threshold": 0.3,
+  "notes": "Lower threshold to improve fraud recall"
+}
