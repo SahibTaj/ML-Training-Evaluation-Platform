@@ -12,3 +12,4 @@ logs/
 # Large datasets (NEVER track in git)
 data/raw/
 data/versions/
+models/registry/fraud_detector/v1/model.pkl
