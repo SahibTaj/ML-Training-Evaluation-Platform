@@ -1,0 +1,8 @@
+experiment_name: fraud_baseline_db
+dataset:
+  name: credit_card_fraud
+  version: v1
+
+model:
+  type: logistic_regression
+  threshold: 0.5

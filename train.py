@@ -1,13 +1,9 @@
-import json
-import os
 import time
-import joblib
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -16,81 +12,79 @@ from sklearn.metrics import (
     roc_auc_score
 )
 
-EXPERIMENT_ID = "exp_001"
-EXPERIMENT_PATH = os.path.join("experiments", EXPERIMENT_ID)
-
-CONFIG_PATH = os.path.join(EXPERIMENT_PATH, "config.json")
-STATUS_PATH = os.path.join(EXPERIMENT_PATH, "status.txt")
-METRICS_PATH = os.path.join(EXPERIMENT_PATH, "metrics.json")
-
-with open(CONFIG_PATH,"r") as f:
-    config = json.load(f)
-
-dataset_version = config["dataset_version"]
-threshold = config["threshold"]
-
-with open(STATUS_PATH, "w") as f:
-    f.write("RUNNING")
-
-DATASET_PATH = os.path.join(
-    "data",
-    "versions",
-    dataset_version,
-    "creditcard.csv"
+from tracking.experiment_tracker import (
+    create_experiment,
+    update_experiment_status,
+    log_metrics
 )
 
-df = pd.read_csv(DATASET_PATH)
 
-X = df.drop("Class", axis=1)
-y = df["Class"]
+def run_training(
+    experiment_name: str,
+    dataset_name: str,
+    dataset_version: str,
+    threshold: float = 0.5
+):
+    
+    experiment_id = create_experiment(
+        experiment_name=experiment_name,
+        dataset_version=dataset_version,
+        model_type="logistic_regression"
+    )
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,
-    random_state=42,
-    stratify=y
-)
+    print(f"🚀 Experiment created with ID: {experiment_id}")
 
-start_time = time.time()
+    try:
+        update_experiment_status(experiment_id, "RUNNING")
 
-model = Pipeline([
+        data_path = f"data/versions/{dataset_version}/creditcard.csv"
+        df = pd.read_csv(data_path)
+
+        X = df.drop("Class", axis=1)
+        y = df["Class"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.2,
+            random_state=42,
+            stratify=y
+        )
+
+        start_time = time.time()
+
+        model = Pipeline([
     ("scaler", StandardScaler()),
     ("clf", LogisticRegression(max_iter=3000, class_weight="balanced"))
 ])
+        model.fit(X_train, y_train)
 
-model.fit(X_train, y_train)
+        training_time = time.time() - start_time
 
-MODEL_REGISTRY_PATH = os.path.join(
-    "models",
-    "registry",
-    "fraud_detector",
-    "v1"
-)
+        y_prob = model.predict_proba(X_test)[:, 1]
+        y_pred = (y_prob >= threshold).astype(int)
 
-os.makedirs(MODEL_REGISTRY_PATH, exist_ok=True)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+        roc_auc = roc_auc_score(y_test, y_prob)
 
-joblib.dump(
-    model,
-    os.path.join(MODEL_REGISTRY_PATH, "model.pkl")
-)
+        log_metrics(
+            experiment_id=experiment_id,
+            accuracy=accuracy,
+            precision=precision,
+            recall=recall,
+            f1=f1,
+            roc_auc=roc_auc,
+            training_time=training_time
+        )
 
-training_time = time.time() - start_time
+        update_experiment_status(experiment_id, "COMPLETED")
 
-y_prob = model.predict_proba(X_test)[:, 1]
-y_pred = (y_prob >= threshold).astype(int)
+        print("✅ Experiment completed successfully.")
 
-metrics = {
-    "accuracy": accuracy_score(y_test, y_pred),
-    "precision": precision_score(y_test, y_pred),
-    "recall": recall_score(y_test, y_pred),
-    "f1": f1_score(y_test, y_pred),
-    "roc_auc": roc_auc_score(y_test, y_prob),
-    "training_time_seconds": round(training_time, 2)
-}
-
-with open(METRICS_PATH, "w") as f:
-    json.dump(metrics, f, indent=4)
-
-with open(STATUS_PATH, "w") as f:
-    f.write("COMPLETED")
+    except Exception as e:
+        update_experiment_status(experiment_id, "FAILED")
+        print("❌ Experiment failed:", str(e))
+        raise
