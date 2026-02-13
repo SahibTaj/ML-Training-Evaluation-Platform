@@ -1,41 +1,44 @@
-import os
-import json
-import pandas as pd
 import streamlit as st
+import pandas as pd
+from tracking.db import fetch_all
 
 st.title("ML Experiment Comparison Dashboard")
 
-EXPERIMENTS_DIR = "experiments"
+# Fetch experiment + metric data from DB
+rows = fetch_all("""
+SELECT 
+    e.id,
+    e.experiment_name,
+    e.dataset_version,
+    e.status,
+    m.accuracy,
+    m.precision,
+    m.recall,
+    m.f1,
+    m.roc_auc,
+    m.training_time
+FROM experiments e
+JOIN metrics m ON e.id = m.experiment_id
+WHERE e.status = 'COMPLETED'
+ORDER BY e.id ASC
+""")
 
-experiment_data = []
-
-for exp_id in os.listdir(EXPERIMENTS_DIR):
-    exp_path = os.path.join(EXPERIMENTS_DIR, exp_id)
-
-    metrics_path = os.path.join(exp_path, "metrics.json")
-    config_path = os.path.join(exp_path, "config.json")
-
-    if os.path.exists(metrics_path) and os.path.exists(config_path):
-        with open(metrics_path) as f:
-            metrics = json.load(f)
-
-        with open(config_path) as f:
-            config = json.load(f)
-
-        if metrics:
-            row = {
-                "experiment_id": exp_id,
-                "dataset_version": config["dataset_version"],
-                "threshold": config["threshold"],
-                **metrics
-            }
-            experiment_data.append(row)
-
-df = pd.DataFrame(experiment_data)
-
-if df.empty:
+if not rows:
     st.warning("No completed experiments found.")
 else:
+    df = pd.DataFrame(rows, columns=[
+        "experiment_id",
+        "experiment_name",
+        "dataset_version",
+        "status",
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "roc_auc",
+        "training_time"
+    ])
+
     st.subheader("📋 Experiment Metrics")
     st.dataframe(df)
 
